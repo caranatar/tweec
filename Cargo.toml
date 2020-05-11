@@ -1,0 +1,23 @@
+[package]
+name = "tweec"
+version = "0.1.0"
+authors = ["Caranatar <caranatar@riseup.net>"]
+edition = "2018"
+license = "MIT"
+description = "Compiler for the Twee 3 interactive fiction format"
+homepage = "https://github.com/caranatar/tweec"
+repository = "https://github.com/caranatar/tweec"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tweep = { version = "0.2", features = ["warning-names"] }
+clap = "2"
+horrorshow = "0.8"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+opener = "0.4"
+eyre = "0.4"
+color-eyre = { version = "0.3", default-features = false }
+termcolor = "1.1"
+atty = "0.2"
