@@ -21,3 +21,7 @@ eyre = "0.4"
 color-eyre = { version = "0.3", default-features = false }
 termcolor = "1.1"
 atty = "0.2"
+codespan-reporting = "0.9"
+strsim = "0.10"
+json_comments = "0.2"
+dirs-next = "1.0"
