@@ -25,3 +25,6 @@ codespan-reporting = "0.9"
 strsim = "0.10"
 json_comments = "0.2"
 dirs-next = "1.0"
+
+[profile.release]
+lto = true
