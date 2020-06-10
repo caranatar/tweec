@@ -11,7 +11,7 @@ repository = "https://github.com/caranatar/tweec"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tweep = { version = "0.2", features = ["warning-names"] }
+tweep = { version = "0.3", features = ["issue-names", "full-context"] }
 clap = "2"
 horrorshow = "0.8"
 serde_json = "1.0"
