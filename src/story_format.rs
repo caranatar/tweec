@@ -52,8 +52,8 @@ pub struct StoryFormat {
 }
 
 impl StoryFormat {
-    pub fn parse(file_name: &str) -> Result<StoryFormat> {
-        let mut format_file = File::open(file_name.to_string())?;
+    pub fn parse(file_path: &std::path::PathBuf) -> Result<StoryFormat> {
+        let mut format_file = File::open(file_path)?;
 
         let mut contents = String::new();
         format_file.read_to_string(&mut contents)?;

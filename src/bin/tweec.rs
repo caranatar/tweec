@@ -1,11 +1,12 @@
 use tweec::Config;
+use tweec::Issue;
+use tweec::StoryFiles;
 use tweec::StoryFormat;
-
-use tweep::ErrorList;
+use tweec::StoryResult;
 use tweep::Output;
-use tweep::Passage;
-use tweep::PassageContent;
 use tweep::Story;
+use tweep::TwinePassage;
+use tweep::Warning;
 
 use clap::{crate_name, crate_version};
 
@@ -14,56 +15,36 @@ use eyre::{eyre, WrapErr};
 
 use horrorshow::html;
 
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::Write;
 
 use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 
-enum Issue {
-    Error(tweep::Error),
-    Warning {
-        warning: tweep::Warning,
-        denied: bool,
-    },
-}
+use codespan_reporting::term;
 
 fn get_start_passage_pid(story: &Story) -> Option<usize> {
     let start_name = story.get_start_passage_name().expect("No start passage");
     let passage = &story.passages.get(start_name);
-    passage.and_then(|p| {
-        if let PassageContent::Normal(twine) = &p.content {
-            Some(twine.pid)
-        } else {
-            None
-        }
-    })
+    passage.and_then(|twine| Some(twine.content.pid))
 }
 
-fn get_pid(passage: &Passage) -> usize {
-    if let PassageContent::Normal(twine) = &passage.content {
-        twine.pid
-    } else {
-        panic!("Expected Twine Content");
-    }
+fn get_pid(twine: &TwinePassage) -> usize {
+    twine.content.pid
 }
 
-fn get_content(passage: &Passage) -> &str {
-    if let PassageContent::Normal(twine) = &passage.content {
-        twine.content.as_str()
-    } else {
-        panic!("Expected Twine Content");
-    }
+fn get_content(twine: &TwinePassage) -> &str {
+    twine.content.content.as_str()
 }
 
-fn lint(
-    story_output: Output<std::result::Result<Story, ErrorList>>,
+fn filter_and_sort_issues(
+    story_result: &StoryResult,
+    mut warnings: Vec<Warning>,
     config: &Config,
-    stdout: &mut StandardStream,
-) -> Result<Story> {
-    let mut is_err = false;
+) -> (Vec<Issue>, bool) {
     let mut issues = Vec::new();
+    let mut is_err = false;
 
-    let (story_result, mut warnings) = story_output.take();
     let all = "all".to_string();
     let allow_all = config.allowed.contains(&all);
     let deny_all = config.denied.contains(&all);
@@ -81,64 +62,90 @@ fn lint(
 
     if let Err(e) = &story_result {
         is_err = true;
-        for e in &e.errors {
+        for e in &e.error_list.errors {
             issues.push(Issue::Error(e.clone()));
         }
     }
 
     issues.sort_by(|left, right| {
-        use std::cmp::Ordering;
-        use tweep::{Position, Positional};
         let left = match left {
-            Issue::Error(e) => e.get_position(),
-            Issue::Warning { warning, .. } => warning.get_position(),
+            Issue::Error(e) => &e.context,
+            Issue::Warning { warning, .. } => &warning.context,
         };
         let right = match right {
-            Issue::Error(e) => e.get_position(),
-            Issue::Warning { warning, .. } => warning.get_position(),
+            Issue::Error(e) => &e.context,
+            Issue::Warning { warning, .. } => &warning.context,
         };
-
         match (left, right) {
-            (Position::StoryLevel, _) => Ordering::Less,
-            (Position::File(lf, lr, lc), Position::File(rf, rr, rc)) => {
-                if lf == rf {
-                    if lr == rr {
-                        lc.cmp(rc)
+            (None, _) => Ordering::Less,
+            (_, None) => Ordering::Greater,
+            (Some(lctx), Some(rctx)) => match (lctx.get_file_name(), rctx.get_file_name()) {
+                (None, _) => Ordering::Less,
+                (_, None) => Ordering::Greater,
+                (Some(_), Some(_)) => {
+                    let lpos = lctx.get_start_position();
+                    let rpos = rctx.get_start_position();
+                    let (lline, lcol) = (lpos.line, lpos.column);
+                    let (rline, rcol) = (rpos.line, rpos.column);
+
+                    if lline == rline {
+                        lcol.cmp(&rcol)
                     } else {
-                        lr.cmp(rr)
+                        lline.cmp(&rline)
                     }
-                } else {
-                    lf.cmp(rf)
                 }
-            }
-            _ => panic!("Bug: Unexpected position types: {:?}, {:?}", left, right),
+            },
         }
     });
 
-    for issue in issues {
-        let kind = match issue {
-            Issue::Error(_) | Issue::Warning { denied: true, .. } => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
-                "Error"
-            },
-            Issue::Warning { denied: false, .. } => {
-                stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
-                "Warning"
-            },
-        };
-        write!(
-            stdout,
-            "{}: ",
-            kind)?;
-        stdout.reset()?;
-        writeln!(
-            stdout,
-            "{}",
-            match issue {
-                Issue::Error(e) => format!("{}", e),
-                Issue::Warning { warning, .. } => format!("{}", warning),
-            }
-        )?;
+    (issues, is_err)
+}
+
+fn print_issue(issue: &Issue, stdout: &mut StandardStream) -> Result<()> {
+    let kind = match issue {
+        Issue::Error(_) | Issue::Warning { denied: true, .. } => {
+            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
+            "Error"
+        }
+        Issue::Warning { denied: false, .. } => {
+            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
+            "Warning"
+        }
+    };
+    write!(stdout, "{}: ", kind)?;
+    stdout.reset()?;
+    writeln!(
+        stdout,
+        "{}",
+        match issue {
+            Issue::Error(e) => format!("{}", e),
+            Issue::Warning { warning, .. } => format!("{}", warning),
+        }
+    )?;
+    Ok(())
+}
+
+fn lint(
+    story_output: Output<StoryResult>,
+    config: &Config,
+    stdout: &mut StandardStream,
+) -> Result<Story> {
+    let (story_result, warnings) = story_output.take();
+
+    let story_files = StoryFiles::new(&story_result);
+
+    let (issues, is_err) = filter_and_sort_issues(&story_result, warnings, config);
+
+    if config.compact {
+        for issue in &issues {
+            print_issue(issue, stdout)?;
+        }
+    } else {
+        let config = term::Config::default();
+        for issue in &issues {
+            let diagnostic = issue.report(&story_files);
+            term::emit(&mut stdout.lock(), &config, &story_files, &diagnostic)?;
+        }
     }
 
     // Force reset of color
@@ -152,7 +159,7 @@ fn lint(
 }
 
 fn main() -> Result<()> {
-    let config = Config::from_args();
+    let config = Config::build()?;
 
     let mut stdout = StandardStream::stdout(config.use_color);
     stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green)))?;
@@ -164,11 +171,10 @@ fn main() -> Result<()> {
     }
 
     let story_format = StoryFormat::parse(&config.format_file)
-        .wrap_err_with(|| format!("Failed to parse story format file: {}", &config.format_file))?;
+        .wrap_err_with(|| format!("Failed to parse story format file: {:?}", &config.format_file))?;
     let story_title = story
         .title
-        .as_ref()
-        .and_then(|x| Some(x.as_str()))
+        .as_deref()
         .unwrap_or("Untitled Story");
     let story_data = format!(
         "{}",
@@ -216,7 +222,10 @@ fn main() -> Result<()> {
         }
     );
 
-    let output = story_format.source.replace("{{STORY_NAME}}", story_title).replace("{{STORY_DATA}}", &story_data);
+    let output = story_format
+        .source
+        .replace("{{STORY_NAME}}", story_title)
+        .replace("{{STORY_DATA}}", &story_data);
     let file_name = config
         .output_file
         .unwrap_or(format!("{}.html", story_title));
