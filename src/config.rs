@@ -13,25 +13,55 @@ use termcolor::ColorChoice;
 
 use std::path::PathBuf;
 
+/// Represents a unified configuration for a run of tweec.
+///
+/// Compiled from the configuration file and command-line arguments given
 pub struct Config {
+    /// True if this is a lint-only run
     pub linting: bool,
+
+    /// Input file(s)/director(y/ies)
     pub inputs: Vec<String>,
+
+    /// The path to the format file to use
     pub format_file: PathBuf,
+
+    /// Output file, if necessary/given
     pub output_file: Option<String>,
+
+    /// True if the output should be sent to `opener`
     pub should_open: bool,
+
+    /// List of allowed (ignored) warning names
     pub allowed: Vec<String>,
+
+    /// List of denied (treated as errors) warning names
     pub denied: Vec<String>,
+
+    /// Whether or not to use color output
     pub use_color: ColorChoice,
+
+    /// If true, use compact output format
     pub compact: bool,
 }
 
 impl Config {
+    /// Loads the [`ConfigFile`], parses the [`CliConfig`], and produces a
+    /// unified `Config`
+    ///
+    /// [`CliConfig`]: struct.CliConfig.html
+    /// [`ConfigFile`]: struct.ConfigFile.html
     pub fn build() -> Result<Self> {
         let config_file = ConfigFile::load()?;
         let cli_config = CliConfig::from_args();
         Ok(Config::layer(config_file, cli_config))
     }
 
+    /// Creates a unified `Config` file from the given [`ConfigFile`] and
+    /// [`CliConfig`]
+    ///
+    /// [`CliConfig`]: struct.CliConfig.html
+    /// [`ConfigFile`]: struct.ConfigFile.html
     pub fn layer(config_file: ConfigFile, cli_config: CliConfig) -> Self {
         let format_file = cli_config
             .format
@@ -113,13 +143,22 @@ pub struct ConfigFileInternal {
     pub format_configs: HashMap<String, FormatConfig>,
 }
 
+/// Stores format paths and settings parsed from the tweec config file
 #[derive(Debug)]
 pub struct ConfigFile {
+    /// Maps formats to paths based on the name of the containing directories
     pub formats: HashMap<String, std::path::PathBuf>,
+
+    /// Maps a format (or default) to a config to use for that format
     pub format_configs: HashMap<String, FormatConfig>,
 }
 
 impl ConfigFile {
+    /// Loads the config file
+    ///
+    /// If the config file does not exist, it will try to create a default one
+    /// in the config directory. Also searches for all Twine 2 formats in the
+    /// paths specified by the config file
     pub fn load() -> Result<Self> {
         let config_path = dirs_next::config_dir()
             .ok_or_else(|| eyre!("Error getting config directory"))?
@@ -186,19 +225,28 @@ impl ConfigFile {
         let cf: ConfigFileInternal = serde_json::from_reader(stripped)?;
         println!("{:?}", cf);
 
-        type T = color_eyre::Result<HashMap<String, PathBuf>>;
+        // Accumulator below needs its type to be specified, but it's long so
+        // alias it here
+        type Res = color_eyre::Result<HashMap<String, PathBuf>>;
         let formats = cf
             .format_paths
             .iter()
-            .fold(Ok(HashMap::new()), |acc: T, p| {
+            .fold(Ok(HashMap::new()), |acc: Res, p| {
+                // If something has already failed, continue failing
                 let mut acc = acc?;
                 let mut path = p.clone();
+
+                // Loop over any variables to replace them
                 while let Some(start) = path.find('$') {
                     let end = match path[start..].find('/') {
                         Some(pos) => pos,
                         None => path.len(),
                     };
+
+                    // Including the $
                     let var = &path[start..end];
+
+                    // Excluding the $
                     let var_name = &var[1..];
                     let replace = match var_name {
                         "HOME" => dirs_next::home_dir().ok_or_else(|| eyre!("Failed to get HOME")),
@@ -223,12 +271,15 @@ impl ConfigFile {
 
                 let path_buf: PathBuf = path.clone().into();
                 if !path_buf.exists() {
-                    // Continue
+                    // Continue without error if the path simply doesn't exist
+                    // TODO: consider warning user
                     return Ok(acc);
                 }
 
                 if !path_buf.is_dir() {
-                    return Err(eyre!("Path {} is not a directory", path));
+                    // Continue without error if the path isn't a directory
+                    // TODO: consider warning user
+                    return Ok(acc);
                 }
 
                 let formats_dir = std::fs::read_dir(path_buf)
@@ -267,8 +318,6 @@ impl ConfigFile {
                 Ok(acc)
             })?;
 
-        println!("formats: {:?}", formats);
-
         Ok(ConfigFile {
             formats,
             format_configs: cf.format_configs,
@@ -276,19 +325,38 @@ impl ConfigFile {
     }
 }
 
+/// The command line options supplied by the user
 pub struct CliConfig {
+    /// If true, lint then exit
     pub linting: bool,
+
+    /// Input files or directories to lint/compile
     pub inputs: Vec<String>,
+
+    /// The story format name or path
     pub format: Option<String>,
+
+    /// The html file name to output. Defaults to <story name>.html
     pub output_file: Option<String>,
+
+    /// If true, send the output file to `opener` for the user
     pub should_open: bool,
+
+    /// List of allowed (ignored) warnings, by name
     pub allowed: Vec<String>,
+
+    /// List of denied (treated as errors) warnings, by name
     pub denied: Vec<String>,
+
+    /// Controls color output
     pub use_color: ColorChoice,
+
+    /// If true, use compact warning and error output
     pub compact: bool,
 }
 
 impl CliConfig {
+    /// Parses the command line arguments
     pub fn from_args() -> Self {
         #[allow(deprecated)]
         let m = App::new(crate_name!())

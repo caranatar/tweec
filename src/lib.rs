@@ -3,6 +3,10 @@
 //! Tweec is in a pre-alpha state and currently lacks several of its planned
 //! features.
 //!
+//! Notes for documentation:
+//!   "all" option for allow/deny
+//!   allow takes precedence over deny
+//!
 //! - [ ] IFID generation
 //! - [ ] StoryData story format detection
 //! - [ ] Decompilation of Twine2 HTML
@@ -11,6 +15,9 @@
 //! - [ ] LSP integration
 //! - [ ] Plugin system for linting specific story formats
 //! - [ ] File/directory watcher
+#![warn(missing_docs)]
+
+/// Alias type for the contained result of parsing a story
 pub type StoryResult = std::result::Result<tweep::Story, tweep::ContextErrorList>;
 
 mod config;

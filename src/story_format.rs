@@ -10,48 +10,55 @@ fn default_name() -> String {
     "Untitled Story Format".to_string()
 }
 
+/// The JSON blob for a story format's definition, per the [Twine 2 spec]
+///
+/// [Twine 2 spec]: https://github.com/iftechfoundation/twine-specs/blob/master/twine-2-storyformats-spec.md
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StoryFormat {
-    // name: (string) Optional. The name of the story format. (Omitting the name
-    // will lead to an Untitled Story Format.)
+    /// name: (string) Optional. The name of the story format. (Omitting the
+    /// name will lead to an Untitled Story Format.)
     #[serde(default = "default_name")]
     pub name: String,
 
-    // version: (string) Required, and semantic version-style formatting
-    // (x.y.z, e.g., 1.2.1) of the version is also required.
+    /// version: (string) Required, and semantic version-style formatting
+    /// (x.y.z, e.g., 1.2.1) of the version is also required.
     pub version: String,
 
-    // author: (string) Optional.
+    /// author: (string) Optional.
     pub author: Option<String>,
 
-    // description: (string) Optional.
+    /// description: (string) Optional.
     pub description: Option<String>,
 
-    // image: (string) Optional. The filename of an image (ideally SVG) served
-    // from the same directory as the format.js file.
+    /// image: (string) Optional. The filename of an image (ideally SVG) served
+    /// from the same directory as the format.js file.
     pub image: Option<String>,
 
-    // url: (string) Optional. The URL of the directory containing the format.js
-    // file.
+    /// url: (string) Optional. The URL of the directory containing the
+    /// format.js file.
     pub url: Option<String>,
 
-    // license: (string) Optional.
+    /// license: (string) Optional.
     pub license: Option<String>,
 
-    // proofing: (boolean) Optional (defaults to false). True if the story
-    // format is a "proofing" format. The distinction is relevant only in the
-    // Twine 2 UI.
+    /// proofing: (boolean) Optional (defaults to false). True if the story
+    /// format is a "proofing" format. The distinction is relevant only in the
+    /// Twine 2 UI.
     #[serde(default)]
     pub proofing: bool,
 
-    // source: (string) Required. An adequately escaped string containing the
-    // full HTML output of the story format, including the two placeholders
-    // {{STORY_NAME}} and {{STORY_DATA}}. (The placeholders are not themselves
-    // required.)
+    /// source: (string) Required. An adequately escaped string containing the
+    /// full HTML output of the story format, including the two placeholders
+    /// {{STORY_NAME}} and {{STORY_DATA}}. (The placeholders are not themselves
+    /// required.)
     pub source: String,
 }
 
 impl StoryFormat {
+    /// Attempts to parse the given file as a `StoryFormat`
+    ///
+    /// Allows Harlowe's malformed JSON blob, but rejects any other malformed
+    /// JSON
     pub fn parse(file_path: &std::path::PathBuf) -> Result<StoryFormat> {
         let mut format_file = File::open(file_path)?;
 

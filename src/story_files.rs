@@ -1,20 +1,25 @@
-use tweep::CodeMap;
 use crate::StoryResult;
 use codespan_reporting::files::Files;
 use std::ops::Range;
+use tweep::CodeMap;
 
+/// Adapts a `Story` and its `CodeMap` for use by codespan
 pub struct StoryFiles<'a> {
+    /// The code map
     pub code_map: &'a CodeMap,
+
+    /// An optional list of passage names. If the story has errors this is None
     pub passage_names: Option<Vec<String>>,
 }
 
 impl<'a> StoryFiles<'a> {
+    /// Creats a new instance from the given `StoryResult`
     pub fn new(res: &'a StoryResult) -> Self {
         let (code_map, passage_names) = match res {
             Ok(story) => {
                 let names = story.passages.keys().cloned().collect();
                 (&story.code_map, Some(names))
-            },
+            }
             Err(e) => {
                 println!("{:?}", &e.code_map);
                 (&e.code_map, None)
