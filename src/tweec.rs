@@ -97,9 +97,8 @@ pub fn run() -> Result<()> {
         .wrap_err_with(|| format!("Failed to write output file {}", &file_name))?;
 
     if config.should_open {
-        if let Err(e) = opener::open(&file_name) {
-            println!("Couldn't open output file {}: {}", &file_name, e);
-        }
+        opener::open(&file_name)
+            .wrap_err_with(|| format!("Failed to open output file {}", &file_name))?;
     }
 
     std::process::exit(0);
