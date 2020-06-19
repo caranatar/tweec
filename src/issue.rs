@@ -1,8 +1,12 @@
+use crate::Config;
 use crate::StoryFiles;
+use crate::StoryResult;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::Files;
 use std::cmp::Ordering;
+use std::io::Write;
 use std::ops::Range;
+use termcolor::{Color, ColorSpec, StandardStream, WriteColor};
 use tweep::FullContext;
 use tweep::Warning;
 use tweep::WarningKind;
@@ -148,4 +152,91 @@ where
         .collect();
     candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
     candidates.into_iter().map(|(_, pv)| pv).collect()
+}
+pub fn filter_and_sort_issues(
+    story_result: &StoryResult,
+    mut warnings: Vec<Warning>,
+    config: &Config,
+) -> (Vec<Issue>, bool) {
+    let mut issues = Vec::new();
+    let mut is_err = false;
+
+    let all = "all".to_string();
+    let allow_all = config.allowed.contains(&all);
+    let deny_all = config.denied.contains(&all);
+    for warning in warnings.drain(..) {
+        let name = warning.get_name().to_string();
+        if allow_all || config.allowed.contains(&name) {
+            continue;
+        }
+        let denied = deny_all || config.denied.contains(&name);
+        if denied {
+            is_err = true;
+        }
+        issues.push(Issue::Warning { warning, denied });
+    }
+
+    if let Err(e) = &story_result {
+        is_err = true;
+        for e in &e.error_list.errors {
+            issues.push(Issue::Error(e.clone()));
+        }
+    }
+
+    issues.sort_by(|left, right| {
+        let left = match left {
+            Issue::Error(e) => &e.context,
+            Issue::Warning { warning, .. } => &warning.context,
+        };
+        let right = match right {
+            Issue::Error(e) => &e.context,
+            Issue::Warning { warning, .. } => &warning.context,
+        };
+        match (left, right) {
+            (None, _) => Ordering::Less,
+            (_, None) => Ordering::Greater,
+            (Some(lctx), Some(rctx)) => match (lctx.get_file_name(), rctx.get_file_name()) {
+                (None, _) => Ordering::Less,
+                (_, None) => Ordering::Greater,
+                (Some(_), Some(_)) => {
+                    let lpos = lctx.get_start_position();
+                    let rpos = rctx.get_start_position();
+                    let (lline, lcol) = (lpos.line, lpos.column);
+                    let (rline, rcol) = (rpos.line, rpos.column);
+
+                    if lline == rline {
+                        lcol.cmp(&rcol)
+                    } else {
+                        lline.cmp(&rline)
+                    }
+                }
+            },
+        }
+    });
+
+    (issues, is_err)
+}
+
+pub fn print_issue(issue: &Issue, stdout: &mut StandardStream) -> color_eyre::Result<()> {
+    let kind = match issue {
+        Issue::Error(_) | Issue::Warning { denied: true, .. } => {
+            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
+            "Error"
+        }
+        Issue::Warning { denied: false, .. } => {
+            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true))?;
+            "Warning"
+        }
+    };
+    write!(stdout, "{}: ", kind)?;
+    stdout.reset()?;
+    writeln!(
+        stdout,
+        "{}",
+        match issue {
+            Issue::Error(e) => format!("{}", e),
+            Issue::Warning { warning, .. } => format!("{}", warning),
+        }
+    )?;
+    Ok(())
 }

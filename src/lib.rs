@@ -18,7 +18,7 @@ pub use config::CliConfig;
 pub use config::Config;
 pub use config::ConfigFile;
 
-mod issue;
+pub mod issue;
 pub use issue::Issue;
 
 mod story_files;
@@ -26,3 +26,9 @@ pub use story_files::StoryFiles;
 
 mod story_format;
 pub use story_format::StoryFormat;
+
+pub mod utils;
+
+pub mod linter;
+
+pub mod tweec;
