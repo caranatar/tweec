@@ -223,7 +223,6 @@ impl ConfigFile {
         let stripped = StripComments::new(config_contents.as_bytes());
         // Parse the string of data into serde_json::Value.
         let cf: ConfigFileInternal = serde_json::from_reader(stripped)?;
-        println!("{:?}", cf);
 
         // Accumulator below needs its type to be specified, but it's long so
         // alias it here

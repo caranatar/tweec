@@ -21,7 +21,6 @@ impl<'a> StoryFiles<'a> {
                 (&story.code_map, Some(names))
             }
             Err(e) => {
-                println!("{:?}", &e.code_map);
                 (&e.code_map, None)
             }
         };
